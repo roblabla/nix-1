@@ -502,8 +502,13 @@ ref<const ValidPathInfo> RemoteStore::addCAToStore(
 }
 
 
-StorePath RemoteStore::addToStoreFromDump(Source & dump, std::string_view name,
-      FileIngestionMethod method, HashType hashType, RepairFlag repair, const StorePathSet & references)
+StorePath RemoteStore::addToStoreFromDump(
+    Source & dump,
+    std::string_view name,
+    ContentAddressMethod method,
+    HashType hashType,
+    const StorePathSet & references,
+    RepairFlag repair)
 {
     return addCAToStore(dump, name, method, hashType, references, repair)->path;
 }

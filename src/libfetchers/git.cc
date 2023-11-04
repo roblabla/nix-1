@@ -8,6 +8,7 @@
 #include "pathlocks.hh"
 #include "processes.hh"
 #include "git.hh"
+#include "posix-source-accessor.hh"
 
 #include "fetch-settings.hh"
 
@@ -299,7 +300,8 @@ std::pair<StorePath, Input> fetchFromWorkdir(ref<Store> store, Input & input, co
         return files.count(file);
     };
 
-    auto storePath = store->addToStore(input.getName(), actualPath, FileIngestionMethod::Recursive, htSHA256, filter);
+    PosixSourceAccessor accessor;
+    auto storePath = store->addToStore(input.getName(), accessor, CanonPath { actualPath }, FileIngestionMethod::Recursive, htSHA256, {}, filter);
 
     // FIXME: maybe we should use the timestamp of the last
     // modified dirty file?
@@ -791,7 +793,8 @@ struct GitInputScheme : InputScheme
             unpackTarfile(*source, tmpDir);
         }
 
-        auto storePath = store->addToStore(name, tmpDir, FileIngestionMethod::Recursive, htSHA256, filter);
+        PosixSourceAccessor accessor;
+        auto storePath = store->addToStore(name, accessor, CanonPath { tmpDir }, FileIngestionMethod::Recursive, htSHA256, {}, filter);
 
         auto lastModified = std::stoull(runProgram("git", true, { "-C", repoDir, "--git-dir", gitDir, "log", "-1", "--format=%ct", "--no-show-signature", input.getRev()->gitRev() }));
 

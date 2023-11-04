@@ -19,6 +19,7 @@
 #include "namespaces.hh"
 #include "child.hh"
 #include "unix-domain-socket.hh"
+#include "posix-source-accessor.hh"
 
 #include <regex>
 #include <queue>
@@ -1290,12 +1291,13 @@ struct RestrictedStore : public virtual RestrictedStoreConfig, public virtual In
 
     StorePath addToStore(
         std::string_view name,
-        const Path & srcPath,
-        FileIngestionMethod method,
+        SourceAccessor & accessor,
+        const CanonPath & srcPath,
+        ContentAddressMethod method,
         HashType hashAlgo,
+        const StorePathSet & references,
         PathFilter & filter,
-        RepairFlag repair,
-        const StorePathSet & references) override
+        RepairFlag repair) override
     { throw Error("addToStore"); }
 
     void addToStore(const ValidPathInfo & info, Source & narSource,
@@ -1319,12 +1321,12 @@ struct RestrictedStore : public virtual RestrictedStoreConfig, public virtual In
     StorePath addToStoreFromDump(
         Source & dump,
         std::string_view name,
-        FileIngestionMethod method,
+        ContentAddressMethod method,
         HashType hashAlgo,
-        RepairFlag repair,
-        const StorePathSet & references) override
+        const StorePathSet & references,
+        RepairFlag repair) override
     {
-        auto path = next->addToStoreFromDump(dump, name, method, hashAlgo, repair, references);
+        auto path = next->addToStoreFromDump(dump, name, method, hashAlgo, references, repair);
         goal.addDependency(path);
         return path;
     }
@@ -2452,8 +2454,7 @@ SingleDrvOutputs LocalDerivationGoal::registerOutputs()
                 throw BuildError(
                     "output path %1% without valid stats info",
                     actualPath);
-            if (outputHash.method == ContentAddressMethod { FileIngestionMethod::Flat } ||
-                outputHash.method == ContentAddressMethod { TextIngestionMethod {} })
+            if (outputHash.method.getFileIngestionMethod() == FileIngestionMethod::Flat)
             {
                 /* The output path should be a regular file without execute permission. */
                 if (!S_ISREG(st->st_mode) || (st->st_mode & S_IXUSR) != 0)
@@ -2465,38 +2466,23 @@ SingleDrvOutputs LocalDerivationGoal::registerOutputs()
             rewriteOutput(outputRewrites);
             /* FIXME optimize and deduplicate with addToStore */
             std::string oldHashPart { scratchPath->hashPart() };
-            HashModuloSink caSink { outputHash.hashType, oldHashPart };
-            std::visit(overloaded {
-                [&](const TextIngestionMethod &) {
-                    readFile(actualPath, caSink);
-                },
-                [&](const FileIngestionMethod & m2) {
-                    switch (m2) {
-                    case FileIngestionMethod::Recursive:
-                        dumpPath(actualPath, caSink);
-                        break;
-                    case FileIngestionMethod::Flat:
-                        readFile(actualPath, caSink);
-                        break;
-                    }
-                },
-            }, outputHash.method.raw);
-            auto got = caSink.finish().first;
+            auto got = ({
+                HashModuloSink caSink { outputHash.hashType, oldHashPart };
+                PosixSourceAccessor accessor;
+                dumpPath(
+                    accessor, CanonPath { actualPath },
+                    caSink,
+                    outputHash.method.getFileIngestionMethod());
+                caSink.finish().first;
+            });
 
-            auto optCA = ContentAddressWithReferences::fromPartsOpt(
-                outputHash.method,
-                std::move(got),
-                rewriteRefs());
-            if (!optCA) {
-                // TODO track distinct failure modes separately (at the time of
-                // writing there is just one but `nullopt` is unclear) so this
-                // message can't get out of sync.
-                throw BuildError("output path '%s' has illegal content address, probably a spurious self-reference with text hashing");
-            }
             ValidPathInfo newInfo0 {
                 worker.store,
                 outputPathName(drv->name, outputName),
-                std::move(*optCA),
+                ContentAddressWithReferences::fromParts(
+                    outputHash.method,
+                    std::move(got),
+                    rewriteRefs()),
                 Hash::dummy,
             };
             if (*scratchPath != newInfo0.path) {
@@ -2510,9 +2496,14 @@ SingleDrvOutputs LocalDerivationGoal::registerOutputs()
                                std::string(newInfo0.path.hashPart())}});
             }
 
-            HashResult narHashAndSize = hashPath(htSHA256, actualPath);
-            newInfo0.narHash = narHashAndSize.first;
-            newInfo0.narSize = narHashAndSize.second;
+            {
+                PosixSourceAccessor accessor;
+                HashResult narHashAndSize = hashPath(
+                    accessor, CanonPath { actualPath },
+                    FileIngestionMethod::Recursive, htSHA256);
+                newInfo0.narHash = narHashAndSize.first;
+                newInfo0.narSize = narHashAndSize.second;
+            }
 
             assert(newInfo0.ca);
             return newInfo0;
@@ -2530,7 +2521,10 @@ SingleDrvOutputs LocalDerivationGoal::registerOutputs()
                         std::string { scratchPath->hashPart() },
                         std::string { requiredFinalPath.hashPart() });
                 rewriteOutput(outputRewrites);
-                auto narHashAndSize = hashPath(htSHA256, actualPath);
+                PosixSourceAccessor accessor;
+                HashResult narHashAndSize = hashPath(
+                    accessor, CanonPath { actualPath },
+                    FileIngestionMethod::Recursive, htSHA256);
                 ValidPathInfo newInfo0 { requiredFinalPath, narHashAndSize.first };
                 newInfo0.narSize = narHashAndSize.second;
                 auto refs = rewriteRefs();

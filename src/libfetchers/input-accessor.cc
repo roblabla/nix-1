@@ -3,31 +3,6 @@
 
 namespace nix {
 
-StorePath InputAccessor::fetchToStore(
-    ref<Store> store,
-    const CanonPath & path,
-    std::string_view name,
-    FileIngestionMethod method,
-    PathFilter * filter,
-    RepairFlag repair)
-{
-    Activity act(*logger, lvlChatty, actUnknown, fmt("copying '%s' to the store", showPath(path)));
-
-    auto source = sinkToSource([&](Sink & sink) {
-        if (method == FileIngestionMethod::Recursive)
-            dumpPath(path, sink, filter ? *filter : defaultPathFilter);
-        else
-            readFile(path, sink);
-    });
-
-    auto storePath =
-        settings.readOnlyMode
-        ? store->computeStorePathFromDump(*source, name, method, htSHA256).first
-        : store->addToStoreFromDump(*source, name, method, htSHA256, repair);
-
-    return storePath;
-}
-
 SourcePath InputAccessor::root()
 {
     return {ref(shared_from_this()), CanonPath::root};
@@ -40,13 +15,18 @@ std::ostream & operator << (std::ostream & str, const SourcePath & path)
 }
 
 StorePath SourcePath::fetchToStore(
-    ref<Store> store,
+    Store & store,
     std::string_view name,
-    FileIngestionMethod method,
-    PathFilter * filter,
+    ContentAddressMethod method,
+    PathFilter & filter,
     RepairFlag repair) const
 {
-    return accessor->fetchToStore(store, path, name, method, filter, repair);
+    return
+        settings.readOnlyMode
+        ? store.computeStorePath(
+            name, *accessor, path, method, htSHA256, {}, filter).first
+        : store.addToStore(
+            name, *accessor, path, method, htSHA256, {}, filter, repair);
 }
 
 std::string_view SourcePath::baseName() const

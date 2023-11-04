@@ -8,6 +8,7 @@
 #include "tarfile.hh"
 #include "types.hh"
 #include "split.hh"
+#include "posix-source-accessor.hh"
 
 namespace nix::fetchers {
 
@@ -156,7 +157,8 @@ DownloadTarballResult downloadTarball(
             throw nix::Error("tarball '%s' contains an unexpected number of top-level files", url);
         auto topDir = tmpDir + "/" + members.begin()->name;
         lastModified = lstat(topDir).st_mtime;
-        unpackedStorePath = store->addToStore(name, topDir, FileIngestionMethod::Recursive, htSHA256, defaultPathFilter, NoRepair);
+        PosixSourceAccessor accessor;
+        unpackedStorePath = store->addToStore(name, accessor, CanonPath { topDir }, FileIngestionMethod::Recursive, htSHA256, {}, defaultPathFilter, NoRepair);
     }
 
     Attrs infoAttrs({

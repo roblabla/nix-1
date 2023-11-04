@@ -366,15 +366,6 @@ HashResult HashSink::currentHash()
 }
 
 
-HashResult hashPath(
-    HashType ht, const Path & path, PathFilter & filter)
-{
-    HashSink sink(ht);
-    dumpPath(path, sink, filter);
-    return sink.finish();
-}
-
-
 Hash compressHash(const Hash & hash, unsigned int newSize)
 {
     Hash h(hash.type);
