@@ -10,7 +10,7 @@ void PosixSourceAccessor::readFile(
 {
     // FIXME: add O_NOFOLLOW since symlinks should be resolved by the
     // caller?
-    AutoCloseFD fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+    AutoCloseFD fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
     if (!fd)
         throw SysError("opening file '%1%'", path);
 

@@ -24,6 +24,11 @@ struct SourceAccessor
 
     /**
      * Return the contents of a file as a string.
+     *
+     * @note Unlike Unix, this method should *not* follow symlinks. Nix
+     * by default wants to manipulate symlinks not use them. Using the
+     * targets of symlinks should only occasionally be down, and only
+     * with care.
      */
     virtual std::string readFile(const CanonPath & path);
 
@@ -32,7 +37,10 @@ struct SourceAccessor
      * called with the size of the file before any data is written to
      * the sink.
      *
-     * Note: subclasses of `SourceAccessor` need to implement at least
+     * @note Like the other `readFile`, this method should *not* follow
+     * symlinks.
+     *
+     * @note subclasses of `SourceAccessor` need to implement at least
      * one of the `readFile()` variants.
      */
     virtual void readFile(
@@ -85,6 +93,10 @@ struct SourceAccessor
 
     typedef std::map<std::string, DirEntry> DirEntries;
 
+    /**
+     * @note Like the `readFile`, this method should *not* follow
+     * symlinks.
+     */
     virtual DirEntries readDirectory(const CanonPath & path) = 0;
 
     virtual std::string readLink(const CanonPath & path) = 0;
