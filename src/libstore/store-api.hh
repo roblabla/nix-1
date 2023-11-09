@@ -286,8 +286,6 @@ public:
 
     StorePath makeFixedOutputPath(std::string_view name, const FixedOutputInfo & info) const;
 
-    StorePath makeTextPath(std::string_view name, const TextInfo & info) const;
-
     StorePath makeFixedOutputPathFromCA(std::string_view name, const ContentAddressWithReferences & ca) const;
 
     /**
@@ -302,27 +300,6 @@ public:
         HashType hashAlgo = htSHA256,
         const StorePathSet & references = {},
         PathFilter & filter = defaultPathFilter) const;
-
-    /**
-     * Preparatory part of addTextToStore().
-     *
-     * !!! Computation of the path should take the references given to
-     * addTextToStore() into account, otherwise we have a (relatively
-     * minor) security hole: a caller can register a source file with
-     * bogus references.  If there are too many references, the path may
-     * not be garbage collected when it has to be (not really a problem,
-     * the caller could create a root anyway), or it may be garbage
-     * collected when it shouldn't be (more serious).
-     *
-     * Hashing the references would solve this (bogus references would
-     * simply yield a different store path, so other users wouldn't be
-     * affected), but it has some backwards compatibility issues (the
-     * hashing scheme changes), so I'm not doing that for now.
-     */
-    StorePath computeStorePathForText(
-        std::string_view name,
-        std::string_view s,
-        const StorePathSet & references) const;
 
     /**
      * Check whether a path is valid.
@@ -560,16 +537,6 @@ public:
         const StorePathSet & references = StorePathSet(),
         RepairFlag repair = NoRepair)
     { unsupported("addToStoreFromDump"); }
-
-    /**
-     * Like addToStore, but the contents written to the output path is a
-     * regular file containing the given string.
-     */
-    virtual StorePath addTextToStore(
-        std::string_view name,
-        std::string_view s,
-        const StorePathSet & references,
-        RepairFlag repair = NoRepair) = 0;
 
     /**
      * Add a mapping indicating that `deriver!outputName` maps to the output path

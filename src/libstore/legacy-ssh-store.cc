@@ -277,13 +277,6 @@ struct LegacySSHStore : public virtual LegacySSHStoreConfig, public virtual Stor
         RepairFlag repair) override
     { unsupported("addToStore"); }
 
-    StorePath addTextToStore(
-        std::string_view name,
-        std::string_view s,
-        const StorePathSet & references,
-        RepairFlag repair) override
-    { unsupported("addTextToStore"); }
-
 private:
 
     void putBuildSettings(Connection & conn)
